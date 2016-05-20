@@ -13,6 +13,8 @@
 // until the first call to swapBuffers().  This is normal.
 RGBmatrixPanel matrix(A, B, C, CLK, LAT, OE, false);
 
+uint8_t data = 0x00;
+uint8_t data_number = 0x00;
 uint8_t controller1_action = 0x00;
 uint8_t controller2_action = 0x10;
 int16_t player1_xpos = 0;
@@ -113,7 +115,7 @@ void controller2()
   }
 
   //if nothing is preing pressed set button_press to 0
-  if (controller2_action == 0x00) { button_press2 = 0; }
+  if (controller2_action == 0x10) { button_press2 = 0; }
   
   //these determine where to move the pixel
 
@@ -130,7 +132,7 @@ void controller2()
     }
   }
   //DOWN
-  else if (controller1_action == 0x12)
+  else if (controller2_action == 0x12)
   {
     if (!button_press2)
     {
@@ -169,12 +171,23 @@ void controller2()
   }
 }
 
+/* Data map
+ *  0x0-: Controller 1 data
+ *  0x1-: Controller 2 data
+ */
+
 void loop() {
-  //FIX  THIS SO THAT IT SENDS A SIGNAL TO ATMEG TO LET IT KNOW THAT IT RECIEVED SIGANL
   if (Serial.available() > 0) 
   {
-    controller1_action = Serial.read();
+    data = Serial.read();
+    data_number = (data & 0xF0);
   }
+
+  //set data to correct variable
+  if (data_number == 0x00) { controller1_action = data; }
+  if (data_number == 0x10) { controller2_action = data; } 
+
+  
   controller1();
   controller2();
   
