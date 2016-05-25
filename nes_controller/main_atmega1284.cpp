@@ -24,6 +24,8 @@ unsigned char temp_data1;
 unsigned char temp_data2;
 unsigned char controller_data1 = 0x00;
 unsigned char controller_data2 = 0x10;
+unsigned char controller_sent1 = 0xFF;
+unsigned char controller_sent2 = 0xFF;
 
 typedef struct task {
 	/*Tasks should have members that include: state, period,
@@ -186,13 +188,15 @@ int controller_out(int state)
 			{ 
 				counter = 0; 
 				PORTC = controller_data1 | (controller_data2 << 4);
-				if (USART_IsSendReady(0))
+				if (USART_IsSendReady(0) && controller_data1 != controller_sent1)
 				{
 					USART_Send(controller_data1, 0);
+					controller_sent1 = controller_data1;
 				}
-				if (USART_IsSendReady(0))
+				if (USART_IsSendReady(0) && controller_data2 != controller_sent2)
 				{
 					USART_Send(controller_data2, 0);
+					controller_sent2 = controller_data2;
 				}
 			} 
 			break;
@@ -211,10 +215,12 @@ int controller_out(int state)
 }
 
 unsigned char task_counter = 0x00;
-unsigned char send_stop = 0x00;
 unsigned char num_players = 0;
+unsigned char task_sent = 0xFF;
+unsigned long ready_counter = 0;
+unsigned long restart_game = 0;
 //sends signal to arduino letting it know what task to run
-enum task_states{press_start, player_choose, one_player, two_player} task_state;
+enum task_states{press_start, player_choose, ready_wait, one_player, two_player} task_state;
 int task_manager(int state)
 {
 	switch(state)
@@ -224,14 +230,26 @@ int task_manager(int state)
 		break;
 		
 		case player_choose:
-			if (num_players == 1) { state = one_player; }
-			if (num_players == 2) { state = two_player; }
+			//if (num_players == 1) { state = one_player; }
+			//if (num_players == 2) { state = two_player; }
+			if (num_players == 1 || num_players == 2) { state = ready_wait; }
+		break;
+		
+		case ready_wait:
+			if (ready_counter < 50000) { ready_counter++; }
+			else if (ready_counter >= 50000)
+			{
+				ready_counter = 0;
+				if (num_players == 1) { state = one_player; num_players = 0; }
+				if (num_players == 2) { state = two_player; num_players = 0; }
+			}
 		break;
 		
 		case one_player:
 		break;
 		
 		case two_player:
+			if (restart_game == 69) { state = press_start; restart_game = 0; }
 		break;
 		
 		default:
@@ -245,9 +263,10 @@ int task_manager(int state)
 			else if (task_counter >= 50)
 			{
 				task_counter = 0;
-				if (USART_IsSendReady(0))
+				if (USART_IsSendReady(0) && task_sent != 0x20)
 				{
 					USART_Send(0x20, 0);
+					task_sent = 0x20;
 				}
 			}
 		break;
@@ -257,13 +276,27 @@ int task_manager(int state)
 			else if (task_counter >= 50)
 			{
 				task_counter = 0;
-				if (USART_IsSendReady(0))
+				if (USART_IsSendReady(0) && task_sent != 0x21)
 				{
 					USART_Send(0x21, 0);
+					task_sent = 0x21;
 				}
 				if (USART_HasReceived(0))
 				{
 					num_players = USART_Receive(0);
+				}
+			}
+		break;
+		
+		case ready_wait:
+			if (task_counter < 50) { task_counter++; }
+			else if (task_counter >= 50)
+			{
+				//restrict number of times signal is sent
+				if (USART_IsSendReady(0) && task_sent != 0x22)
+				{
+					USART_Send(0x22, 0);
+					task_sent = 0x22;
 				}
 			}
 		break;
@@ -276,10 +309,14 @@ int task_manager(int state)
 			else if (task_counter >= 50)
 			{
 				//restrict number of times signal is sent
-				if (USART_IsSendReady(0) && send_stop < 10)
+				if (USART_IsSendReady(0) && task_sent != 0x24)
 				{
-					USART_Send(0x22, 0);
-					send_stop++;
+					USART_Send(0x24, 0);
+					task_sent = 0x24;
+				}
+				if (USART_HasReceived(0))
+				{
+					restart_game = USART_Receive(0);
 				}
 			}
 		break;

@@ -13,28 +13,6 @@
 // until the first call to swapBuffers().  This is normal.
 RGBmatrixPanel matrix(A, B, C, CLK, LAT, OE, false);
 
-////controller1
-//uint8_t NO_PRESS_1 = 0;
-//uint8_t UP_1 = 0;
-//uint8_t DOWN_1 = 0;
-//uint8_t LEFT_1 = 0;
-//uint8_t RIGHT_1 = 0;
-//uint8_t SELECT_1 = 0;
-//uint8_t START_1 = 0;
-//uint8_t Y_1 = 0;
-//uint8_t B_1 = 0; 
-//
-////controller2
-//uint8_t NO_PRESS_2 = 0;
-//uint8_t UP_2 = 0;
-//uint8_t DOWN_2 = 0;
-//uint8_t LEFT_2 = 0;
-//uint8_t RIGHT_2 = 0;
-//uint8_t SELECT_2 = 0;
-//uint8_t START_2 = 0;
-//uint8_t Y_2 = 0;
-//uint8_t B_2 = 0;
-
 uint8_t data = 0x00;
 uint8_t data_number = 0x00;
 uint8_t task_number = 0x00;
@@ -47,11 +25,19 @@ int16_t player2_xpos = 31;
 int16_t player2_ypos = 15;
 uint8_t button_press2 = 0;
 
+
+//clear screens
 uint8_t clear_screen_ps2 = 0;
+uint8_t clear_start_screen = 0;
+uint8_t clear_player_screen = 0;
+uint8_t clear_ready_screen = 0;
 
 void setup() {
   matrix.begin();
   Serial.begin(9600);
+
+  //set task to begin at start 
+  task_number = 0x20;
 }
 
 void controller1()
@@ -63,6 +49,7 @@ void controller1()
     matrix.drawPixel(0, 0, matrix.Color333(7, 7, 7));
     matrix.drawPixel(31,15, matrix.Color333(7, 7, 7));
     clear_screen_ps2 = 1;
+    clear_ready_screen = 0;
   }
   
   //if a button is make previous LED black
@@ -83,7 +70,10 @@ void controller1()
   //UP
   if (controller1_action == 0x01)
   {
-    if (!button_press1)
+    //if player is blocking above
+    if (player1_xpos == player2_xpos && player1_ypos - 1 == player2_ypos) 
+    { matrix.drawPixel(player1_xpos, player1_ypos, matrix.Color333(7, 7, 7)); }
+    else if (!button_press1)
     {
       if (player1_ypos > 0) { player1_ypos--; }
       matrix.drawPixel(player1_xpos, player1_ypos,
@@ -95,7 +85,10 @@ void controller1()
   //DOWN
   else if (controller1_action == 0x02)
   {
-    if (!button_press1)
+    //if player is blocking below
+    if (player1_xpos == player2_xpos && player1_ypos + 1 == player2_ypos) 
+    { matrix.drawPixel(player1_xpos, player1_ypos, matrix.Color333(7, 7, 7)); }
+    else if (!button_press1)
     {
       if (player1_ypos < 15) { player1_ypos++; }
       matrix.drawPixel(player1_xpos, player1_ypos,
@@ -108,7 +101,10 @@ void controller1()
   //LEFT
   else if (controller1_action == 0x03)
   {
-    if (!button_press1)
+    //if player is blocking left
+    if (player1_xpos - 1 == player2_xpos && player1_ypos == player2_ypos) 
+    { matrix.drawPixel(player1_xpos, player1_ypos, matrix.Color333(7, 7, 7)); }
+    else if (!button_press1)
     {
       if (player1_xpos > 0) { player1_xpos--; }
       matrix.drawPixel(player1_xpos, player1_ypos,
@@ -121,7 +117,10 @@ void controller1()
   //RIGHT
   else if (controller1_action == 0x04)
   {
-    if (!button_press1)
+    //if player is blocking right
+    if (player1_xpos + 1 == player2_xpos && player1_ypos == player2_ypos)
+    { matrix.drawPixel(player1_xpos, player1_ypos, matrix.Color333(7, 7, 7)); }
+    else if (!button_press1)
     {
       if (player1_xpos < 31) { player1_xpos++; }
       matrix.drawPixel(player1_xpos, player1_ypos,
@@ -130,11 +129,19 @@ void controller1()
       Serial.println(player1_xpos);
     }
   }
+
+  //SELECt
+  else if (controller1_action == 0x05)
+  {
+    Serial.write(69);
+    player1_xpos = 0;
+    player1_ypos = 0;
+  }
 }
 
 void controller2()
 {
-    //if a button is make previous LED black
+    //if a button is pressed make previous LED black
   if (controller2_action != 0x10)
   {
     if (!button_press2)
@@ -152,7 +159,10 @@ void controller2()
   //UP
   if (controller2_action == 0x11)
   {
-    if (!button_press2)
+    //if player is blocking above
+    if (player1_xpos == player2_xpos && player1_ypos == player2_ypos - 1)
+    { matrix.drawPixel(player2_xpos, player2_ypos, matrix.Color333(7, 7, 7)); }
+    else if (!button_press2)
     {
       if (player2_ypos > 0) { player2_ypos--; }
       matrix.drawPixel(player2_xpos, player2_ypos,
@@ -164,7 +174,10 @@ void controller2()
   //DOWN
   else if (controller2_action == 0x12)
   {
-    if (!button_press2)
+    //if player is blocking below
+    if (player1_xpos == player2_xpos && player1_ypos == player2_ypos + 1)
+    { matrix.drawPixel(player2_xpos, player2_ypos, matrix.Color333(7, 7, 7)); }
+    else if (!button_press2)
     {
       if (player2_ypos < 15) { player2_ypos++; }
       matrix.drawPixel(player2_xpos, player2_ypos,
@@ -177,7 +190,10 @@ void controller2()
   //LEFT
   else if (controller2_action == 0x13)
   {
-    if (!button_press2)
+    //if player is blocking left
+    if (player1_xpos == player2_xpos - 1 && player1_ypos == player2_ypos)
+    { matrix.drawPixel(player2_xpos, player2_ypos, matrix.Color333(7, 7, 7)); }
+    else if (!button_press2)
     {
       if (player2_xpos > 0) { player2_xpos--; }
       matrix.drawPixel(player2_xpos, player2_ypos,
@@ -190,7 +206,10 @@ void controller2()
   //RIGHT
   else if (controller2_action == 0x14)
   {
-    if (!button_press2)
+    //if player is blocking right
+    if (player1_xpos == player2_xpos + 1 && player1_ypos == player2_ypos)
+    { matrix.drawPixel(player2_xpos, player2_ypos, matrix.Color333(7, 7, 7)); }
+    else if (!button_press2)
     {
       if (player2_xpos < 31) { player2_xpos++; }
       matrix.drawPixel(player2_xpos, player2_ypos,
@@ -199,6 +218,14 @@ void controller2()
       Serial.println(player2_xpos);
     }
   }
+
+  //SELECT
+  else if (controller2_action == 0x15)
+  {
+    Serial.write(69);
+    player2_xpos = 31;
+    player2_ypos = 15;
+  }
 }
 
 uint16_t task0_counter = 0;
@@ -206,6 +233,14 @@ uint8_t task0_display = 1;
 
 void task0()
 {
+  //clear start at beginning
+  if (!clear_start_screen) 
+  { 
+    matrix.fillScreen(matrix.Color333(0, 0, 0)); 
+    clear_start_screen = 1; 
+    clear_screen_ps2 = 0;
+  }
+  
   if (task0_display == 1)
   {
     matrix.setCursor(1, 0);   // start at top left, with one pixel of spacing
@@ -240,11 +275,15 @@ void task0()
   }
 }
 
-uint8_t clear_screen = 0;
 uint8_t task1_pick = 1;
 void task1()
 {
-  if (!clear_screen) { matrix.fillScreen(matrix.Color333(0, 0, 0)); clear_screen = 1; }
+  if (!clear_player_screen) 
+  { 
+    matrix.fillScreen(matrix.Color333(0, 0, 0)); 
+    clear_player_screen = 1; 
+    clear_start_screen = 0;
+   }
 
   //ps1 is yellow with an arrow
   if (task1_pick == 1)
@@ -266,7 +305,7 @@ void task1()
       matrix.print('S');
       matrix.print(' ');
       matrix.print('2');
-    if (controller1_action == 0x02) { task1_pick = 2; clear_screen = 0; }
+    if (controller1_action == 0x02) { task1_pick = 2; clear_player_screen = 0; }
   }
   //ps2 is yellow with an arrow
   else if (task1_pick == 2)
@@ -288,11 +327,34 @@ void task1()
       matrix.print('S');
       matrix.print(' ');
       matrix.print('1');
-    if (controller1_action == 0x01) { task1_pick = 1; clear_screen = 0; }
+    if (controller1_action == 0x01) { task1_pick = 1; clear_player_screen = 0; }
   }
 
   //if controller is pressed write data to atmel
-  if (controller1_action == 0x07) { Serial.write(task1_pick); }
+  if (controller1_action == 0x07) { Serial.write(task1_pick); task1_pick = 1; }
+}
+
+
+void task2()
+{
+  if (!clear_ready_screen) 
+  { 
+    matrix.fillScreen(matrix.Color333(0, 0, 0)); 
+    clear_ready_screen = 1; 
+    clear_player_screen = 0;
+  }
+  
+  matrix.setCursor(1, 4);   // start at top left, with one pixel of spacing
+  matrix.setTextSize(1);    // size 1 == 8 pixels high
+  
+  // print each letter with a rainbow color
+  matrix.setTextColor(matrix.Color333(0,2,6));
+  matrix.print('R');
+  matrix.print('E');
+  matrix.print('A');
+  matrix.print('D');
+  matrix.print('Y');
+  return;
 }
 
 /* Data map
@@ -314,10 +376,19 @@ void loop() {
   if (data_number == 0x10) { controller2_action = data; } 
   if (data_number == 0x20) { task_number = data; }
 
+/* Task map
+ * 0x20: press_start
+ * 0x21: player_choose
+ * 0x22: ready_wait
+ * 0x23: one_player
+ * 0x24: two_player
+ */
+
   //Serial.println(task_number);
   if (task_number == 0x20) { task0(); }
   else if (task_number == 0x21) { task1(); }
-  else if (task_number == 0x22) 
+  else if (task_number == 0x22) { task2(); }
+  else if (task_number == 0x24) 
   {
     controller1(); controller2(); 
   }
