@@ -4,7 +4,6 @@
  * Created: 5/13/2016 2:32:58 PM
  * Author : PeterBae
  */ 
-
 #include <avr/io.h>
 #include "timer.h"
 #include "usart_atmega1284.h"
@@ -218,9 +217,15 @@ unsigned char task_counter = 0x00;
 unsigned char num_players = 0;
 unsigned char task_sent = 0xFF;
 unsigned long ready_counter = 0;
-unsigned long restart_game = 0;
+unsigned long two_player_data = 0x00;
+unsigned long two_player_data_number = 0;
+unsigned char restart_game = 0;
+unsigned char bomb_number1 = 0xFF;
+unsigned char bomb_number2 = 0xFF;
+unsigned char game_end = 0xFF;
+
 //sends signal to arduino letting it know what task to run
-enum task_states{press_start, player_choose, ready_wait, one_player, two_player} task_state;
+enum task_states{press_start, player_choose, ready_wait, one_player, two_player, player1_win, player2_win} task_state;
 int task_manager(int state)
 {
 	switch(state)
@@ -236,8 +241,8 @@ int task_manager(int state)
 		break;
 		
 		case ready_wait:
-			if (ready_counter < 50000) { ready_counter++; }
-			else if (ready_counter >= 50000)
+			if (ready_counter < 10000) { ready_counter++; }
+			else if (ready_counter >= 10000)
 			{
 				ready_counter = 0;
 				if (num_players == 1) { state = one_player; num_players = 0; }
@@ -249,8 +254,18 @@ int task_manager(int state)
 		break;
 		
 		case two_player:
-			if (restart_game == 69) { state = press_start; restart_game = 0; }
+			if (restart_game == 0x69) { state = press_start; restart_game = 0; }
+			if (game_end == 0x81) { state = player2_win; game_end = 0xFF; }
+			if (game_end == 0x82) { state = player1_win; game_end = 0xFF; }
 		break;
+		
+		case player1_win:
+			if (restart_game == 0x6A) { state = press_start; restart_game = 0; }
+			break;
+			
+		case player2_win:
+			if (restart_game == 0x6A) { state = press_start; restart_game = 0; }
+			break;
 		
 		default:
 		break;
@@ -316,9 +331,38 @@ int task_manager(int state)
 				}
 				if (USART_HasReceived(0))
 				{
-					restart_game = USART_Receive(0);
+					two_player_data = USART_Receive(0);
+					two_player_data_number = two_player_data & 0xF0;
+					if (two_player_data_number == 0x60) { restart_game = two_player_data; }
+					if (two_player_data_number == 0x70) { bomb_number1 = two_player_data; }
+					if (two_player_data_number == 0x40) { bomb_number2 = two_player_data; }
+					if (two_player_data_number == 0x80) { game_end = two_player_data; }
 				}
 			}
+		break;
+		
+		case player1_win:
+		if (USART_IsSendReady(0) && task_sent != 0x2A)
+		{
+			USART_Send(0x2A, 0);
+			task_sent = 0x2A;
+		}
+		if (USART_HasReceived(0))
+		{
+			restart_game = USART_Receive(0);
+		}
+		break;
+		
+		case player2_win:
+		if (USART_IsSendReady(0) && task_sent != 0x2B)
+		{
+			USART_Send(0x2B, 0);
+			task_sent = 0x2B;
+		}
+		if (USART_HasReceived(0))
+		{
+			restart_game = USART_Receive(0);
+		}
 		break;
 		
 		default:
@@ -328,15 +372,298 @@ int task_manager(int state)
 	return state;
 }
 
+unsigned char bomb_sent = 0x00;
+unsigned long counter1_1 = 0;
+unsigned long counter1_2 = 0;
+unsigned long counter1_3 = 0;
+unsigned long counter2_1 = 0;
+unsigned long counter2_2 = 0;
+unsigned long counter2_3 = 0;
+
+enum bomb1_1_states {start1_1, wait1_1, send1_1} bomb1_1_state;
+int bomb1_1(int state)
+{
+	switch (state)
+	{
+		case start1_1:
+			if (bomb_number1 == 0x71) { state = wait1_1; bomb_number1 = 0; }
+			break;
+		case wait1_1:
+			if (counter1_1 < 10000) { counter1_1++; }
+			else { state = send1_1; counter1_1 = 0; }
+			break;
+		case send1_1:
+			if (bomb_sent == 0x51) { state = start1_1; bomb_sent = 0; }
+			break;
+		default:
+			break;
+	}
+	
+	switch (state)
+	{
+		case start1_1:
+			counter1_1 = 0;
+			break;
+		case wait1_1:
+			break;
+		case send1_1:
+			if (counter1_1 < 50) { counter1_1++; }
+			else if (counter1_1 >= 50)
+			{
+				//restrict number of times signal is sent
+				if (USART_IsSendReady(0) && bomb_sent != 0x51)
+				{
+					USART_Send(0x51, 0);
+					bomb_sent = 0x51;
+				}
+			}
+			break;
+		default:
+			break;
+	}
+
+	return state;
+}
+
+enum bomb1_2_states {start1_2, wait1_2, send1_2} bomb1_2_state;
+
+int bomb1_2(int state)
+{
+	switch (state)
+	{
+		case start1_2:
+			if (bomb_number1 == 0x72) { state = wait1_2; bomb_number1 = 0; }
+			break;
+		case wait1_2:
+			if (counter1_2 < 10000) { counter1_2++; }
+			else { state = send1_2; counter1_2 = 0; }
+			break;
+		case send1_2:
+			if (bomb_sent == 0x52) { state = start1_2; bomb_sent = 0; }
+			break;
+		default:
+			break;
+	}
+	
+	switch (state)
+	{
+		case start1_2:
+			counter1_2 = 0;
+			break;
+		case wait1_2:
+			break;
+		case send1_2:
+			if (counter1_2 < 50) { counter1_2++; }
+			else if (counter1_2 >= 50)
+			{
+				//restrict number of times signal is sent
+				if (USART_IsSendReady(0) && bomb_sent != 0x52)
+				{
+					USART_Send(0x52, 0);
+					bomb_sent = 0x52;
+				}
+			}
+			break;
+		default:
+			break;
+	}
+
+	return state;
+}
+
+enum bomb1_3_states {start1_3, wait1_3, send1_3} bomb1_3_state;
+
+int bomb1_3(int state)
+{
+	switch (state)
+	{
+		case start1_3:
+			if (bomb_number1 == 0x73) { state = wait1_3; bomb_number1 = 0; }
+			break;
+		case wait1_3:
+			if (counter1_3 < 10000) { counter1_3++; }
+			else { state = send1_3; counter1_3 = 0; }
+			break;
+		case send1_3:
+			if (bomb_sent == 0x53) { state = start1_3; bomb_sent = 0; }
+			break;
+		default:
+			break;
+	}
+	
+	switch (state)
+	{
+		case start1_3:
+			counter1_3 = 0;
+			break;
+		case wait1_3:
+			break;
+		case send1_3:
+			if (counter1_3 < 50) { counter1_3++; }
+			else if (counter1_3 >= 50)
+			{
+				//restrict number of times signal is sent
+				if (USART_IsSendReady(0) && bomb_sent != 0x53)
+				{
+					USART_Send(0x53, 0);
+					bomb_sent = 0x53;
+				}
+			}
+			break;
+		default:
+			break;
+	}
+
+	return state;
+}
+
+enum bomb2_1_states {start2_1, wait2_1, send2_1} bomb2_1_state;
+
+int bomb2_1(int state)
+{
+	switch (state)
+	{
+		case start2_1:
+			if (bomb_number2 == 0x41) { state = wait2_1; bomb_number2 = 0; }
+			break;
+		case wait2_1:
+			if (counter2_1 < 10000) { counter2_1++; }
+			else { state = send2_1; counter2_1 = 0; }
+			break;
+		case send2_1:
+			if (bomb_sent == 0x54) { state = start2_1; bomb_sent = 0; }
+			break;
+		default:
+			break;
+	}
+	
+	switch (state)
+	{
+		case start2_1:
+			counter2_1 = 0;
+			break;
+		case wait2_1:
+			break;
+		case send2_1:
+			if (counter2_1 < 50) { counter2_1++; }
+			else if (counter2_1 >= 50)
+			{
+				//restrict number of times signal is sent
+				if (USART_IsSendReady(0) && bomb_sent != 0x54)
+				{
+					USART_Send(0x54, 0);
+					bomb_sent = 0x54;
+				}
+			}
+			break;
+		default:
+			break;
+	}
+
+	return state;
+}
+
+enum bomb2_2_states {start2_2, wait2_2, send2_2} bomb2_2_state;
+
+int bomb2_2(int state)
+{
+	switch (state)
+	{
+		case start2_2:
+			if (bomb_number2 == 0x42) { state = wait2_2; bomb_number2 = 0; }
+			break;
+		case wait2_2:
+			if (counter2_2 < 10000) { counter2_2++; }
+			else { state = send2_2; counter2_2 = 0; }
+			break;
+		case send2_2:
+			if (bomb_sent == 0x55) { state = start2_2; bomb_sent = 0; }
+			break;
+		default:
+			break;
+	}
+	
+	switch (state)
+	{
+		case start2_2:
+			counter2_2 = 0;
+			break;
+		case wait2_2:
+			break;
+		case send2_2:
+			if (counter2_2 < 50) { counter2_2++; }
+			else if (counter2_2 >= 50)
+			{
+				//restrict number of times signal is sent
+				if (USART_IsSendReady(0) && bomb_sent != 0x55)
+				{
+					USART_Send(0x55, 0);
+					bomb_sent = 0x55;
+				}
+			}
+			break;
+		default:
+			break;
+	}
+
+	return state;
+}
+
+enum bomb2_3_states {start2_3, wait2_3, send2_3} bomb2_3_state;
+
+int bomb2_3(int state)
+{
+	switch (state)
+	{
+		case start2_3:
+			if (bomb_number2 == 0x43) { state = wait2_3; bomb_number2 = 0; }
+			break;
+		case wait2_3:
+			if (counter2_3 < 10000) { counter2_3++; }
+			else { state = send2_3; counter2_3 = 0; }
+			break;
+		case send2_3:
+			if (bomb_sent == 0x56) { state = start2_3; bomb_sent = 0; }
+			break;
+		default:
+			break;
+	}
+	
+	switch (state)
+	{
+		case start2_3:
+			counter2_3 = 0;
+			break;
+		case wait2_3:
+			break;
+		case send2_3:
+			if (counter2_3 < 50) { counter2_3++; }
+			else if (counter2_3 >= 50)
+			{
+				//restrict number of times signal is sent
+				if (USART_IsSendReady(0) && bomb_sent != 0x56)
+				{
+					USART_Send(0x56, 0);
+					bomb_sent = 0x56;
+				}
+			}
+			break;
+		default:
+			break;
+	}
+
+	return state;
+}
+
 int main(void)
 {
     DDRA = 0x66; PORTA = 0x99;
 	DDRC = 0xFF; PORTC = 0x00;
 	DDRD = 0xFF; PORTD = 0x00;
 	
-	static task task1, task2, task3;
-	task *tasks[] = { &task1, &task2, &task3};
-	const unsigned short numTasks = 3;
+	static task task1, task2, task3, task4, task5, task6, task7, task8, task9;
+	task *tasks[] = { &task1, &task2, &task3, &task4, &task5, &task6, &task7, &task8, &task9};
+	const unsigned short numTasks = 9;
 
 	task1.state = start;//Task initial state.
 	task1.period = 1;//Task Period.
@@ -352,7 +679,38 @@ int main(void)
 	task3.period = 1;
 	task3.elapsedTime = 1;
 	task3.TickFct = &task_manager;
-		
+	
+	task4.state = start1_1;
+	task4.period = 1;
+	task4.elapsedTime = 1;
+	task4.TickFct = &bomb1_1;
+	
+	task5.state = start1_2;
+	task5.period = 1;
+	task5.elapsedTime = 1;
+	task5.TickFct = &bomb1_2;
+	
+	task6.state = start1_3;
+	task6.period = 1;
+	task6.elapsedTime = 1;
+	task6.TickFct = &bomb1_3;
+	
+	task7.state = start2_1;
+	task7.period = 1;
+	task7.elapsedTime = 1;
+	task7.TickFct = &bomb2_1;
+	
+	task8.state = start2_2;
+	task8.period = 1;
+	task8.elapsedTime = 1;
+	task8.TickFct = &bomb2_2;
+	
+	task9.state = start2_3;
+	task9.period = 1;
+	task9.elapsedTime = 1;
+	task9.TickFct = &bomb2_3;
+	
+	
 	initUSART(0);
 	TimerSet(1);
 	TimerOn();
