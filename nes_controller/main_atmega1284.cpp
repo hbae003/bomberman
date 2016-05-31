@@ -26,6 +26,10 @@ unsigned char controller_data2 = 0x10;
 unsigned char controller_sent1 = 0xFF;
 unsigned char controller_sent2 = 0xFF;
 
+//for selecting levels 
+unsigned char level_select = 1;
+unsigned char level_opening = 0xFF;
+
 typedef struct task {
 	/*Tasks should have members that include: state, period,
 		a measurement of elapsed time, and a function pointer.*/
@@ -217,15 +221,18 @@ unsigned char task_counter = 0x00;
 unsigned char num_players = 0;
 unsigned char task_sent = 0xFF;
 unsigned long ready_counter = 0;
+unsigned long level_counter = 0;
 unsigned long two_player_data = 0x00;
+unsigned long one_player_data = 0x00;
 unsigned long two_player_data_number = 0;
+unsigned long one_player_data_number = 0;
 unsigned char restart_game = 0;
 unsigned char bomb_number1 = 0xFF;
 unsigned char bomb_number2 = 0xFF;
 unsigned char game_end = 0xFF;
 
 //sends signal to arduino letting it know what task to run
-enum task_states{press_start, player_choose, ready_wait, one_player, two_player, player1_win, player2_win} task_state;
+enum task_states{press_start, player_choose, lv1, lv2, lv3, ready_wait, one_player, two_player, player1_win, player2_win, game_over} task_state;
 int task_manager(int state)
 {
 	switch(state)
@@ -237,20 +244,54 @@ int task_manager(int state)
 		case player_choose:
 			//if (num_players == 1) { state = one_player; }
 			//if (num_players == 2) { state = two_player; }
-			if (num_players == 1 || num_players == 2) { state = ready_wait; }
+			if (num_players == 2 || num_players == 1){ state = ready_wait; }
 		break;
 		
+		case lv1:
+			if (level_counter < 20000) { level_counter++; }
+			else if (level_counter >= 10000)
+			{
+				level_counter = 0;
+				level_select = 1;
+				state = one_player;
+			}
+			break;
+			
+		case lv2:
+			if (level_counter < 20000) { level_counter++; }
+			else if (level_counter >= 10000)
+			{
+				level_counter = 0;
+				level_select = 2;
+				state = one_player;
+			}
+			break;
+		
+		case lv3:
+			if (level_counter < 20000) { level_counter++; }
+			else if (level_counter >= 10000)
+			{
+				level_counter = 0;
+				level_select = 3;
+				state = one_player;
+			}
+			break;
+			
 		case ready_wait:
 			if (ready_counter < 10000) { ready_counter++; }
 			else if (ready_counter >= 10000)
 			{
 				ready_counter = 0;
-				if (num_players == 1) { state = one_player; num_players = 0; }
+				if (num_players == 1) { state = lv1; num_players = 0; }
 				if (num_players == 2) { state = two_player; num_players = 0; }
 			}
 		break;
 		
 		case one_player:
+			if (level_opening == 0xA2) { state = lv2; level_opening = 0xFF; }
+			if (level_opening == 0xA3) { state = lv3; level_opening = 0xFF; }
+			if (restart_game == 0x69) { state = press_start; restart_game = 0; }
+			if (game_end == 0x81 || game_end == 0x82) { state = game_over; }
 		break;
 		
 		case two_player:
@@ -264,6 +305,10 @@ int task_manager(int state)
 			break;
 			
 		case player2_win:
+			if (restart_game == 0x6A) { state = press_start; restart_game = 0; }
+			break;
+			
+		case game_over:
 			if (restart_game == 0x6A) { state = press_start; restart_game = 0; }
 			break;
 		
@@ -303,11 +348,54 @@ int task_manager(int state)
 			}
 		break;
 		
+		case lv1:
+			if (task_counter < 50) { task_counter++; }
+			else if (task_counter >= 50)
+			{
+				//restrict number of times signal is sent
+				task_counter = 0;
+				if (USART_IsSendReady(0) && task_sent != 0x25)
+				{
+					USART_Send(0x25, 0);
+					task_sent = 0x25;
+				}
+			}
+			break;
+			
+		case lv2:
+			if (task_counter < 50) { task_counter++; }
+			else if (task_counter >= 50)
+			{
+				//restrict number of times signal is sent
+				task_counter = 0;
+				if (USART_IsSendReady(0) && task_sent != 0x26)
+				{
+					USART_Send(0x26, 0);
+					task_sent = 0x26;
+				}
+			}
+			break;
+			
+		case lv3:
+			if (task_counter < 50) { task_counter++; }
+			else if (task_counter >= 50)
+			{
+				//restrict number of times signal is sent
+				task_counter = 0;
+				if (USART_IsSendReady(0) && task_sent != 0x27)
+				{
+					USART_Send(0x27, 0);
+					task_sent = 0x27;
+				}
+			}
+			break;
+		
 		case ready_wait:
 			if (task_counter < 50) { task_counter++; }
 			else if (task_counter >= 50)
 			{
 				//restrict number of times signal is sent
+				task_counter = 0;
 				if (USART_IsSendReady(0) && task_sent != 0x22)
 				{
 					USART_Send(0x22, 0);
@@ -317,6 +405,26 @@ int task_manager(int state)
 		break;
 		
 		case one_player:
+			if (task_counter < 50) { task_counter++; }
+			else if (task_counter >= 50)
+			{
+				//restrict number of times signal is sent
+				if (USART_IsSendReady(0) && task_sent != 0x23)
+				{
+					USART_Send(0x23, 0);
+					task_sent = 0x23;
+				}
+				if (USART_HasReceived(0))
+				{
+					one_player_data = USART_Receive(0);
+					one_player_data_number = one_player_data & 0xF0;
+					if (one_player_data_number == 0x60) { restart_game = one_player_data; }
+					if (one_player_data_number == 0x70) { bomb_number1 = one_player_data; }
+					if (one_player_data_number == 0x40) { bomb_number2 = one_player_data; }
+					if (one_player_data_number == 0x80) { game_end = one_player_data; }
+					if (one_player_data_number == 0xA0) { level_opening = one_player_data; }
+				}
+			}
 		break;
 		
 		case two_player:
@@ -364,6 +472,18 @@ int task_manager(int state)
 			restart_game = USART_Receive(0);
 		}
 		break;
+		
+		case game_over:
+		if (USART_IsSendReady(0) && task_sent != 0x2C)
+		{
+			USART_Send(0x2C, 0);
+			task_sent = 0x2C;
+		}
+		if (USART_HasReceived(0))
+		{
+			restart_game = USART_Receive(0);
+		}
+			break;
 		
 		default:
 		break;
@@ -655,15 +775,101 @@ int bomb2_3(int state)
 	return state;
 }
 
+enum bomb_drop_states {start_drop, level1, level2, level3} bomb_drop_state;
+unsigned long armer_counter = 0;
+
+int single_bomb_drop(int state)
+{
+	switch (state)
+	{
+		case start:
+			if (task_sent == 0x23 && level_select == 1) { state = level1; }
+			if (task_sent == 0x23 && level_select == 2) { state = level2; }
+			if (task_sent == 0x23 && level_select == 3) { state = level3; }
+			break;
+		
+		case level1:
+			if (task_sent != 0x23) { state = start; game_end = 0xFF; }
+			armer_counter++;
+			break;
+			
+		case level2:
+			if (task_sent != 0x23) { state = start; game_end = 0xFF; }
+			armer_counter++;
+			break;
+		
+		case level3:
+			if (task_sent != 0x23) { state = start; game_end = 0xFF; }
+			armer_counter++;
+			break;
+		
+		default:
+			break;
+	}
+	
+	switch (state)
+	{
+		case start:
+			armer_counter = 0;
+			break;
+		
+		case level1:
+			if(armer_counter % 20 == 0)
+			{
+				if (USART_IsSendReady(0))
+				{
+					USART_Send(0x90, 0);
+				}
+				if (USART_IsSendReady(0))
+				{
+					USART_Send(0x91, 0);
+				}
+			}
+			break;
+		
+		case level2:
+			if(armer_counter % 15 == 0)
+			{
+				if (USART_IsSendReady(0))
+				{
+					USART_Send(0x90, 0);
+				}
+				if (USART_IsSendReady(0))
+				{
+					USART_Send(0x91, 0);
+				}
+			}
+			break;
+		
+		case level3:
+			if(armer_counter % 10 == 0)
+			{
+				if (USART_IsSendReady(0))
+				{
+					USART_Send(0x90, 0);
+				}
+				if (USART_IsSendReady(0))
+				{
+					USART_Send(0x91, 0);
+				}
+			}
+			break;
+		
+		default:
+			break;
+	}
+	return state;
+}
+
 int main(void)
 {
     DDRA = 0x66; PORTA = 0x99;
 	DDRC = 0xFF; PORTC = 0x00;
 	DDRD = 0xFF; PORTD = 0x00;
 	
-	static task task1, task2, task3, task4, task5, task6, task7, task8, task9;
-	task *tasks[] = { &task1, &task2, &task3, &task4, &task5, &task6, &task7, &task8, &task9};
-	const unsigned short numTasks = 9;
+	static task task1, task2, task3, task4, task5, task6, task7, task8, task9, task10;
+	task *tasks[] = { &task1, &task2, &task3, &task4, &task5, &task6, &task7, &task8, &task9, &task10};
+	const unsigned short numTasks = 10;
 
 	task1.state = start;//Task initial state.
 	task1.period = 1;//Task Period.
@@ -709,6 +915,11 @@ int main(void)
 	task9.period = 1;
 	task9.elapsedTime = 1;
 	task9.TickFct = &bomb2_3;
+	
+	task10.state = start_drop;
+	task10.period = 500;
+	task10.elapsedTime = 500;
+	task10.TickFct = &single_bomb_drop;
 	
 	
 	initUSART(0);
