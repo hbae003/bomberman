@@ -22,6 +22,7 @@ uint8_t button_press1 = 0;
 uint8_t button_press2 = 0;
 uint8_t bomb_explode_number = 0x00;
 uint8_t single_bomb_arm = 0x00;
+uint8_t safe_change = 0x00;
 
 //clear screens
 uint8_t clear_screen_ps2 = 0;
@@ -34,6 +35,7 @@ uint8_t clear_lvl1_screen = 0;
 uint8_t clear_lvl2_screen = 0;
 uint8_t clear_lvl3_screen = 0;
 uint8_t clear_over_screen = 0;
+uint8_t clear_end_screen = 0;
 
 //bomb pick and send 
 uint8_t bomb_pick1 = 0;
@@ -68,6 +70,12 @@ struct player{
   bomb bombs[3]; 
 };
 
+//create a struct for safe zone per dot 
+struct safe{
+  uint8_t xpos;
+  uint8_t ypos;
+};
+
 //single player bombs 
 uint8_t single_num_bombs = 6;
 uint8_t color1[3] = {0, 7, 0};
@@ -75,10 +83,12 @@ uint8_t color2[3] = {0, 2, 0};
 uint8_t color3[3] = {7, 0, 0};
 uint8_t single_state = 1;
 
+
 //set up players, bombs, and pebbles 
 player player1, player2;
 bomb p1_1, p1_2, p1_3, p2_1, p2_2, p2_3;
 pebble pebble1;
+safe s0_0, s0_1, s0_2, s1_0, s1_1, s1_2, s2_0, s2_1, s2_2;
 
 void setup() {
   matrix.begin();
@@ -148,6 +158,26 @@ void setup() {
   pebble1.ypos = random(5, 11);
   //setup random number generator 
   randomSeed(analogRead(12));
+
+  //initialize safezone for two player 
+  s0_0.xpos = 11;
+  s0_0.ypos = 7;
+  s0_1.xpos = s0_0.xpos;
+  s0_1.ypos = s0_0.ypos + 1;
+  s0_2.xpos = s0_0.xpos;
+  s0_2.ypos = s0_0.ypos + 2;
+  s1_0.xpos = s0_0.xpos + 1;
+  s1_0.ypos = s0_0.ypos;
+  s1_1.xpos = s0_0.xpos + 1;
+  s1_1.ypos = s0_0.ypos + 1;
+  s1_2.xpos = s0_0.xpos + 1;
+  s1_2.ypos = s0_0.ypos + 2;
+  s2_0.xpos = s0_0.xpos + 2;
+  s2_0.ypos = s0_0.ypos;
+  s2_1.xpos = s0_0.xpos + 2;
+  s2_1.ypos = s0_0.ypos + 1;
+  s2_2.xpos = s0_0.xpos + 2;
+  s2_2.ypos = s0_0.ypos + 2;
 }
 
 void single1()
@@ -699,14 +729,14 @@ void bomb_explode2()
           || player1.ypos == player1.bombs[explode_inc1].ypos)
       { 
         if (task_number ==  0x23) { Serial.write(0x81); }
-        if (player1.lives > 1) 
+        if (player1.lives > 1 && !safe_check(player1.xpos, player1.ypos)) 
         { 
           player1.lives--; 
           player1.dead = 1;
           player1.xpos = 31;
           player1.ypos = 0;
         }
-        else { Serial.write(0x81); } 
+        else if (player1.lives <= 1) { Serial.write(0x81); } 
       }
       
       //player2 touched explosion standing on same x or y pos
@@ -714,14 +744,14 @@ void bomb_explode2()
           || player2.ypos == player1.bombs[explode_inc1].ypos)
       { 
         if (task_number ==  0x23) { Serial.write(0x81); }
-        if (player2.lives > 1) 
+        if (player2.lives > 1 && !safe_check(player2.xpos, player2.ypos)) 
         { 
           player2.lives--; 
           player2.dead = 1;
           player2.xpos = 31;
           player2.ypos = 15;
         }
-        else { Serial.write(0x82); } 
+        else if (player2.lives <= 1) { Serial.write(0x82); } 
       }
 
       //single player bomb explosion
@@ -865,14 +895,14 @@ void bomb_explode2()
           || player1.ypos == player2.bombs[explode_inc2].ypos)
       { 
         if (task_number ==  0x23) { Serial.write(0x81); }
-        if (player1.lives > 1) 
+        if (player1.lives > 1 && !safe_check(player1.xpos, player1.ypos)) 
         { 
           player1.lives--; 
           player1.dead = 1;
           player1.xpos = 31;
           player1.ypos = 0;
         }
-        else { Serial.write(0x81); } 
+        else if (player1.lives <= 1) { Serial.write(0x81); } 
       }
       
       //player2 touched explosion standing on same x or y pos
@@ -880,32 +910,32 @@ void bomb_explode2()
           || player2.ypos == player2.bombs[explode_inc2].ypos)
       { 
         if (task_number ==  0x23) { Serial.write(0x81); }
-        if (player2.lives > 1) 
+        if (player2.lives > 1 && !safe_check(player2.xpos, player2.ypos)) 
         { 
           player2.lives--; 
           player2.dead = 1;
           player2.xpos = 31;
           player2.ypos = 15;
         }
-        else { Serial.write(0x82); } 
+        else if (player2.lives <= 1) { Serial.write(0x82); } 
       }
 
       //single player bomb explosion
       if (task_number == 0x23)
       {
         //up down bomb
-        while (single_bomb1_y < 12) 
+        while (single_bomb2_y < 12) 
         {
-          matrix.drawPixel(player1.bombs[explode_inc2].xpos, 
-                            single_bomb1_y, matrix.Color333(7, 7, 7));
-          single_bomb1_y++;
+          matrix.drawPixel(player2.bombs[explode_inc2].xpos, 
+                            single_bomb2_y, matrix.Color333(7, 7, 7));
+          single_bomb2_y++;
         }
         //left right bomb
-        while (single_bomb1_x < 23) 
+        while (single_bomb2_x < 23) 
         {
-          matrix.drawPixel(single_bomb1_x, player1.bombs[explode_inc2].ypos,
+          matrix.drawPixel(single_bomb2_x, player2.bombs[explode_inc2].ypos,
                             matrix.Color333(7, 7, 7));
-          single_bomb1_x++;
+          single_bomb2_x++;
         }
       }
       
@@ -913,18 +943,18 @@ void bomb_explode2()
       if (task_number == 0x24)
       {
         //up down bomb
-        while (bomb1_y < 15) 
+        while (bomb2_y < 15) 
         {
-          matrix.drawPixel(player1.bombs[explode_inc2].xpos, 
-                            bomb1_y, matrix.Color333(7, 7, 7));
-          bomb1_y++;
+          matrix.drawPixel(player2.bombs[explode_inc2].xpos, 
+                            bomb2_y, matrix.Color333(7, 7, 7));
+          bomb2_y++;
         }
         //left right bomb
-        while (bomb1_x < 24) 
+        while (bomb2_x < 24) 
         {
-          matrix.drawPixel(bomb1_x, player1.bombs[explode_inc2].ypos,
+          matrix.drawPixel(bomb2_x, player2.bombs[explode_inc2].ypos,
                             matrix.Color333(7, 7, 7));
-          bomb1_x++;
+          bomb2_x++;
         }
       }
     }//end of first if statement
@@ -935,6 +965,7 @@ void bomb_explode2()
       player2.bombs[explode_inc2].explode = 0;
       player2.bombs[explode_inc2].explode_count = 0;
       player2.bombs[explode_inc2].armed = 0;
+      player2.num_bombs++;
       if (task_number == 0x23) { single_num_bombs++; }
       single_bomb2_x = 8;
       single_bomb2_y = 4;
@@ -945,18 +976,18 @@ void bomb_explode2()
       if (task_number == 0x23)
       {
         //up down bomb erase
-        while (single_bomb1_y < 12) 
+        while (single_bomb2_y < 12) 
         {
-          matrix.drawPixel(player1.bombs[explode_inc2].xpos, 
-                            single_bomb1_y, matrix.Color333(0, 0, 0));
-          single_bomb1_y++;
+          matrix.drawPixel(player2.bombs[explode_inc2].xpos, 
+                            single_bomb2_y, matrix.Color333(0, 0, 0));
+          single_bomb2_y++;
         }
         //left right bomb erase
-        while (single_bomb1_x < 23) 
+        while (single_bomb2_x < 23) 
         {
-          matrix.drawPixel(single_bomb1_x, player1.bombs[explode_inc2].ypos,
+          matrix.drawPixel(single_bomb2_x, player2.bombs[explode_inc2].ypos,
                             matrix.Color333(0, 0, 0));
-          single_bomb1_x++;
+          single_bomb2_x++;
         }
       }
       
@@ -964,18 +995,18 @@ void bomb_explode2()
       if (task_number == 0x24)
       {
         //up down bomb erase
-        while (bomb1_y < 15) 
+        while (bomb2_y < 15) 
         {
-          matrix.drawPixel(player1.bombs[explode_inc2].xpos, 
-                            bomb1_y, matrix.Color333(0, 0, 0));
-          bomb1_y++;
+          matrix.drawPixel(player2.bombs[explode_inc2].xpos, 
+                            bomb2_y, matrix.Color333(0, 0, 0));
+          bomb2_y++;
         }
         //left right bomb erase
-        while (bomb1_x < 24) 
+        while (bomb2_x < 24) 
         {
-          matrix.drawPixel(bomb1_x, player1.bombs[explode_inc2].ypos,
+          matrix.drawPixel(bomb2_x, player2.bombs[explode_inc2].ypos,
                             matrix.Color333(0, 0, 0));
-          bomb1_x++;
+          bomb2_x++;
         }
       }
       
@@ -1141,6 +1172,30 @@ void task5()
   }
 }
 
+void task6()
+{
+  if (!clear_end_screen) { matrix.fillScreen(matrix.Color333(0, 0, 0)); clear_end_screen = 1; }
+  matrix.setCursor(8, 0);   // start at top left, with one pixel of spacing
+  matrix.setTextSize(1);    // size 1 == 8 pixels high
+  
+  // print each letter with a rainbow color
+  matrix.setTextColor(matrix.Color333(7,7,7));
+  matrix.print('T');
+  matrix.print('H');
+  matrix.print('E');
+
+  matrix.setCursor(8, 9);
+  matrix.print('E');
+  matrix.print('N');
+  matrix.print('D');
+
+  if(controller1_action == 0x05 || controller2_action == 0x15)
+  {
+    reset_all();
+    Serial.write(0x6A);
+  }
+}
+
 void reset_all()
 {
   player1.xpos = 1;
@@ -1194,7 +1249,28 @@ void reset_all()
   clear_lvl2_screen = 0;
   clear_lvl3_screen = 0;
   clear_over_screen = 0;
-}
+  clear_end_screen = 0;
+
+  //reset safe_zone
+  s0_0.xpos = 11;
+  s0_0.ypos = 7;
+  s0_1.xpos = s0_0.xpos;
+  s0_1.ypos = s0_0.ypos + 1;
+  s0_2.xpos = s0_0.xpos;
+  s0_2.ypos = s0_0.ypos + 2;
+  s1_0.xpos = s0_0.xpos + 1;
+  s1_0.ypos = s0_0.ypos;
+  s1_1.xpos = s0_0.xpos + 1;
+  s1_1.ypos = s0_0.ypos + 1;
+  s1_2.xpos = s0_0.xpos + 1;
+  s1_2.ypos = s0_0.ypos + 2;
+  s2_0.xpos = s0_0.xpos + 2;
+  s2_0.ypos = s0_0.ypos;
+  s2_1.xpos = s0_0.xpos + 2;
+  s2_1.ypos = s0_0.ypos + 1;
+  s2_2.xpos = s0_0.xpos + 2;
+  s2_2.ypos = s0_0.ypos + 2;
+}// end of reset_all
 
 //drop a bomb when the atmel sends a signl to 
 uint8_t prev_drop = 0x00;
@@ -1233,7 +1309,7 @@ void single_bomb_armer()
   }
   Serial.println(single_num_bombs);
   prev_drop = single_bomb_arm;
-}
+}//end of single bomb armer
 
 void pebble_drop()
 {
@@ -1248,7 +1324,7 @@ void pebble_drop()
     matrix.fillRect(1, 5, 5, 8, matrix.Color333(0, 0, 0));
     matrix.fillRect(25, 5, 5, 8, matrix.Color333(0, 0, 0));
   }
-}
+}//end of pebble drop
 
 void display_pebble_number()
 {
@@ -1262,7 +1338,7 @@ void display_pebble_number()
   matrix.print(points);
   matrix.setCursor(1, 5);
   matrix.print(points);
-}
+}//end of display_pebble_number
 
 void level_handler()
 {
@@ -1272,9 +1348,10 @@ void level_handler()
     single_state++;
     if (single_state == 2) { Serial.write(0xA2);}
     else if (single_state == 3) { Serial.write(0xA3); }
+    else if (single_state == 4) { Serial.write(0x83); }
     reset_all();
   }
-}
+}//end of level handler
 
 void level1()
 {
@@ -1295,7 +1372,7 @@ void level1()
   matrix.print('O');
   matrix.print('N');
   matrix.print('E');
-}
+}//end of level_one display
 
 void level2()
 {
@@ -1320,7 +1397,7 @@ void level2()
   reset_all();
   clear_lvl2_screen = 1;
   single_state = 2;
-}
+}// end of level_two display
 
 void level3()
 {
@@ -1347,6 +1424,55 @@ void level3()
   reset_all();
   clear_lvl3_screen = 1;
   single_state = 3;
+}//end of level_three display
+
+void print_safe()
+{
+  matrix.fillRect(s0_0.xpos, s0_0.ypos, 3, 3, matrix.Color333(7, 7, 0));
+}//end of print safe()
+
+uint8_t prev_safe = 0x00;
+void safe_setup()
+{
+  if (safe_change == 0xB0 && prev_drop != 0xB0)
+  {
+    matrix.fillRect(s0_0.xpos, s0_0.ypos, 3, 3, matrix.Color333(0, 0, 0));
+    s0_0.xpos = random(1, 20);
+    s0_0.ypos = random(1, 12);
+    s0_1.xpos = s0_0.xpos;
+    s0_1.ypos = s0_0.ypos + 1;
+    s0_2.xpos = s0_0.xpos;
+    s0_2.ypos = s0_0.ypos + 2;
+    s1_0.xpos = s0_0.xpos + 1;
+    s1_0.ypos = s0_0.ypos;
+    s1_1.xpos = s0_0.xpos + 1;
+    s1_1.ypos = s0_0.ypos + 1;
+    s1_2.xpos = s0_0.xpos + 1;
+    s1_2.ypos = s0_0.ypos + 2;
+    s2_0.xpos = s0_0.xpos + 2;
+    s2_0.ypos = s0_0.ypos;
+    s2_1.xpos = s0_0.xpos + 2;
+    s2_1.ypos = s0_0.ypos + 1;
+    s2_2.xpos = s0_0.xpos + 2;
+    s2_2.ypos = s0_0.ypos + 2;
+    matrix.drawPixel(player1.xpos, player1.ypos, matrix.Color333(7, 2, 0));
+    matrix.drawPixel(player2.xpos, player2.ypos, matrix.Color333(0, 2, 5));
+  }
+  prev_safe = safe_change;
+}//end of safe_setup
+
+bool safe_check(uint8_t x, uint8_t y)
+{
+  if (s0_0.xpos == x && s0_0.ypos == y) { return true; }
+  if (s0_1.xpos == x && s0_1.ypos == y) { return true; }
+  if (s0_2.xpos == x && s0_2.ypos == y) { return true; }
+  if (s1_0.xpos == x && s1_0.ypos == y) { return true; }
+  if (s1_1.xpos == x && s1_1.ypos == y) { return true; }
+  if (s1_2.xpos == x && s1_2.ypos == y) { return true; }
+  if (s2_0.xpos == x && s2_0.ypos == y) { return true; }
+  if (s2_1.xpos == x && s2_1.ypos == y) { return true; }
+  if (s2_2.xpos == x && s2_2.ypos == y) { return true; }
+  return false;
 }
 
 /* Data map
@@ -1360,6 +1486,7 @@ void level3()
  *  SEND 0x8-: Player died
  *  RECIEVE 0x9-: Single Player Bomb armer
  *  SEND 0xA-: Single Player Level
+ *  RECIEVE 0xB-: Safezone 
  */
 
 void loop() {
@@ -1376,6 +1503,7 @@ void loop() {
   if (data_number == 0x20) { task_number = data; }
   if (data_number == 0x50) { bomb_explode_number = data; }
   if (data_number == 0x90) { single_bomb_arm = data; }
+  if (data_number == 0xB0) { safe_change = data; }
 
 /* Task map
  * 0x20: press_start
@@ -1409,6 +1537,8 @@ void loop() {
     bomb_explode2(); 
     lives_display(); 
     revive();
+    print_safe();
+    safe_setup();
   }
   else if (task_number == 0x25) { level1(); }
   else if (task_number == 0x26) { level2(); }
@@ -1416,6 +1546,5 @@ void loop() {
   else if (task_number == 0x2A) { task3(); } //player1 wins
   else if (task_number == 0x2B) { task4(); } //player2 wins
   else if (task_number == 0x2C) { task5(); } //game over 
-    
-  
+  else if (task_number == 0x2D) { task6(); } //single player win
 }

@@ -232,7 +232,7 @@ unsigned char bomb_number2 = 0xFF;
 unsigned char game_end = 0xFF;
 
 //sends signal to arduino letting it know what task to run
-enum task_states{press_start, player_choose, lv1, lv2, lv3, ready_wait, one_player, two_player, player1_win, player2_win, game_over} task_state;
+enum task_states{press_start, player_choose, lv1, lv2, lv3, ready_wait, one_player, two_player, player1_win, player2_win, game_over, the_end} task_state;
 int task_manager(int state)
 {
 	switch(state)
@@ -292,6 +292,7 @@ int task_manager(int state)
 			if (level_opening == 0xA3) { state = lv3; level_opening = 0xFF; }
 			if (restart_game == 0x69) { state = press_start; restart_game = 0; }
 			if (game_end == 0x81 || game_end == 0x82) { state = game_over; }
+			if (game_end == 0x83) { state = the_end; }
 		break;
 		
 		case two_player:
@@ -309,6 +310,10 @@ int task_manager(int state)
 			break;
 			
 		case game_over:
+			if (restart_game == 0x6A) { state = press_start; restart_game = 0; }
+			break;
+			
+		case the_end:
 			if (restart_game == 0x6A) { state = press_start; restart_game = 0; }
 			break;
 		
@@ -483,6 +488,18 @@ int task_manager(int state)
 		{
 			restart_game = USART_Receive(0);
 		}
+			break;
+		
+		case the_end:
+			if (USART_IsSendReady(0) && task_sent != 0x2D)
+			{
+				USART_Send(0x2D, 0);
+				task_sent = 0x2D;
+			}
+			if (USART_HasReceived(0))
+			{
+				restart_game = USART_Receive(0);
+			}
 			break;
 		
 		default:
@@ -861,15 +878,63 @@ int single_bomb_drop(int state)
 	return state;
 }
 
+enum safe_states {safe_init, safe_send} safe_state;
+	
+unsigned char safe_counter = 0;
+int safe_safe(int state)
+{
+	switch(state)
+	{
+		case safe_init:
+			if (task_sent == 0x24) { state = safe_send; }
+			break;
+		
+		case safe_send:
+			if (task_sent != 0x24) { state = safe_init; }
+			break;
+			
+		default:
+			break;
+	}
+	
+	switch(state)
+	{
+		case safe_init:
+		safe_counter = 0;
+		break;
+		
+		case safe_send:
+			safe_counter++;
+			if(safe_counter >= 100)
+			{
+				safe_counter = 0;
+				if (USART_IsSendReady(0))
+				{
+					USART_Send(0xB0, 0);
+				}
+				if (USART_IsSendReady(0))
+				{
+					USART_Send(0xB1, 0);
+				}
+			}
+		break;
+		
+		default:
+			break;
+		
+	}
+	return state;
+} 
+
 int main(void)
 {
     DDRA = 0x66; PORTA = 0x99;
 	DDRC = 0xFF; PORTC = 0x00;
 	DDRD = 0xFF; PORTD = 0x00;
 	
-	static task task1, task2, task3, task4, task5, task6, task7, task8, task9, task10;
-	task *tasks[] = { &task1, &task2, &task3, &task4, &task5, &task6, &task7, &task8, &task9, &task10};
-	const unsigned short numTasks = 10;
+	static task task1, task2, task3, task4, task5, task6, task7, task8, task9, task10, task11;
+	task *tasks[] = { &task1, &task2, &task3, &task4, &task5, &task6, &task7, &task8, &task9, &task10, &task11};
+	const unsigned short numTasks = 11;
 
 	task1.state = start;//Task initial state.
 	task1.period = 1;//Task Period.
@@ -921,6 +986,10 @@ int main(void)
 	task10.elapsedTime = 500;
 	task10.TickFct = &single_bomb_drop;
 	
+	task11.state = safe_init;
+	task11.period = 400;
+	task11.elapsedTime = 400;
+	task11.TickFct = &safe_safe;
 	
 	initUSART(0);
 	TimerSet(1);
