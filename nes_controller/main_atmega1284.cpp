@@ -799,7 +799,7 @@ int single_bomb_drop(int state)
 {
 	switch (state)
 	{
-		case start:
+		case start_drop:
 			if (task_sent == 0x23 && level_select == 1) { state = level1; }
 			if (task_sent == 0x23 && level_select == 2) { state = level2; }
 			if (task_sent == 0x23 && level_select == 3) { state = level3; }
@@ -826,7 +826,7 @@ int single_bomb_drop(int state)
 	
 	switch (state)
 	{
-		case start:
+		case start_drop:
 			armer_counter = 0;
 			break;
 		
